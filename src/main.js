@@ -10,7 +10,7 @@ $('.hud small').id='keyboardHint';
 $('.position-actions').insertAdjacentHTML('beforeend','<button id="enableKeyboard" type="button">启用键盘控制</button>');
 $('.move-help').textContent='先点击三维视窗或启用按钮 · W/S → Y · A/D → Z · Q/E → X · Esc 退出';
 let keyboardEnabled=false;
-const movementByCode={KeyW:['Y',.5],KeyS:['Y',-.5],KeyA:['Z',.5],KeyD:['Z',-.5],KeyQ:['X',.5],KeyE:['X',-.5]};
+const movementByCode={KeyW:['Y',1],KeyS:['Y',-1],KeyA:['Z',1],KeyD:['Z',-1],KeyQ:['X',1],KeyE:['X',-1]};
 const movementByKey={w:movementByCode.KeyW,s:movementByCode.KeyS,a:movementByCode.KeyA,d:movementByCode.KeyD,q:movementByCode.KeyQ,e:movementByCode.KeyE};
 function setKeyboardControl(enabled){
   if(enabled&&!droneAnchor){event('模型仍在加载，请稍后再启用键盘控制。');return;}
@@ -42,6 +42,43 @@ queueMicrotask(()=>{
     moveDrone(movement[0],movement[1]);
     $('#keyboardHint').textContent=`收到 ${e.code||e.key} · ${movement[0]} ${$('#drone'+movement[0]+'Value').textContent} m · Esc 退出`;
   },true);
+  // Panel coordinates use Z for height; Three.js uses Y for height and Z for depth.
+  const sceneAxisForRelativeAxis={X:'x',Y:'z',Z:'y'};
+  const relativePositionLine=new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),
+    new THREE.LineDashedMaterial({color:0xffd34d,dashSize:.14,gapSize:.08,transparent:true,opacity:.9})
+  );
+  relativePositionLine.computeLineDistances();
+  scene.add(relativePositionLine);
+  const frameRelativeScene=()=>{
+    if(!droneAnchor)return;
+    const relativeDistance=Math.max(4,droneAnchor.position.length());
+    const center=droneAnchor.position.clone().multiplyScalar(.5);
+    const distance=7+relativeDistance*1.2;
+    camera.position.copy(center).add(new THREE.Vector3(.72,-.86,.58).normalize().multiplyScalar(distance));
+    camera.near=Math.max(distance/100,.01);
+    camera.far=distance*20;
+    camera.updateProjectionMatrix();
+    orbit.target.copy(center);
+    orbit.update();
+  };
+  const frameWhenReady=()=>{if(droneAnchor)frameRelativeScene();else requestAnimationFrame(frameWhenReady)};
+  frameWhenReady();
+  updateDronePosition=()=>{
+    const nextPosition=new THREE.Vector3();
+    ['X','Y','Z'].forEach(axis=>{
+      const value=+$('#drone'+axis).value;
+      $('#drone'+axis+'Value').textContent=value.toFixed(2);
+      nextPosition[sceneAxisForRelativeAxis[axis]]=value;
+    });
+    if(!droneAnchor)return;
+    droneAnchor.position.copy(nextPosition);
+    relativePositionLine.geometry.setFromPoints([new THREE.Vector3(),nextPosition]);
+    relativePositionLine.computeLineDistances();
+    frameRelativeScene();
+    event('无人机相对电线杆位置已更新。');
+  };
+  ['X','Y','Z'].forEach(axis=>$('#drone'+axis).oninput=updateDronePosition);
 });
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x07131f);const camera=new THREE.PerspectiveCamera(42,1,.01,100);camera.position.set(1.6,-1.8,1.15);const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));$('#viewport').append(renderer.domElement);renderer.domElement.tabIndex=0;renderer.domElement.setAttribute('aria-label','无人机仿真视窗');const orbit=new OrbitControls(camera,renderer.domElement);orbit.target.set(0,0,.22);orbit.enableDamping=true;scene.add(new THREE.HemisphereLight(0xc6efff,0x122636,2.4));const light=new THREE.DirectionalLight(0xffffff,2.5);light.position.set(2,-3,4);scene.add(light);const grid=new THREE.GridHelper(4,24,0x23566c,0x133545);grid.position.z=-.08;scene.add(grid);
 let robot,droneAnchor,pole,joints=[],selected=0,filter='all',rotor=false,running=false,pct=0,recording=false,recordTimer=null,rotorSpeed=60;const values={},tracks=[],frames=[];const loader=new URDFLoader(),base=`${import.meta.env.BASE_URL}robot/`;loader.packages={'天枢无人机完整版(更换悬垂式绝缘子串)':base};loader.load(base+'drone.urdf',r=>{robot=r;robot.rotation.x=-Math.PI/2;robot.traverse(o=>{if(o.isMesh)o.material=new THREE.MeshStandardMaterial({color:o.name.includes('left')||o.name.includes('right')?0xffa11c:0x42b8e8,metalness:.55,roughness:.3})});droneAnchor=new THREE.Group();scene.add(droneAnchor);droneAnchor.add(robot);scene.updateMatrixWorld(true);pole=robot.links?.dianxiangan;if(pole){scene.attach(pole);pole.traverse(o=>{if(o.isMesh)o.material=new THREE.MeshStandardMaterial({color:0x8997a0,metalness:.7,roughness:.42})})}joints=Object.values(robot.joints).filter(j=>j.jointType!=='fixed');joints.forEach(j=>values[j.name]=0);$('#status').textContent=`已加载 ${joints.length} 个可动关节 · 仿真控制就绪`;renderJoints();resize();event('无人机模型已加载。')},undefined,()=>$('#status').textContent='模型加载失败，请通过本地服务器打开网站。');

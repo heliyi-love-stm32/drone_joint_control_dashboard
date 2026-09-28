@@ -10,7 +10,8 @@ $('.hud small').id='keyboardHint';
 $('.position-actions').insertAdjacentHTML('beforeend','<button id="enableKeyboard" type="button">启用键盘控制</button>');
 $('.move-help').textContent='先点击三维视窗或启用按钮 · W/S → Y · A/D → Z · Q/E → X · Esc 退出';
 let keyboardEnabled=false;
-const movementByCode={KeyW:['Y',.25],KeyS:['Y',-.25],KeyA:['Z',.25],KeyD:['Z',-.25],KeyQ:['X',.25],KeyE:['X',-.25]};
+const movementByCode={KeyW:['Y',.5],KeyS:['Y',-.5],KeyA:['Z',.5],KeyD:['Z',-.5],KeyQ:['X',.5],KeyE:['X',-.5]};
+const movementByKey={w:movementByCode.KeyW,s:movementByCode.KeyS,a:movementByCode.KeyA,d:movementByCode.KeyD,q:movementByCode.KeyQ,e:movementByCode.KeyE};
 function setKeyboardControl(enabled){
   if(enabled&&!droneAnchor){event('模型仍在加载，请稍后再启用键盘控制。');return;}
   keyboardEnabled=enabled;
@@ -24,20 +25,22 @@ function setKeyboardControl(enabled){
 queueMicrotask(()=>{
   renderer.domElement.addEventListener('pointerdown',()=>setKeyboardControl(true));
   $('#enableKeyboard').addEventListener('click',()=>setKeyboardControl(!keyboardEnabled));
-  document.addEventListener('keydown',e=>{
+  window.addEventListener('keydown',e=>{
     if(e.code==='Escape'&&keyboardEnabled){
       e.preventDefault();
       e.stopImmediatePropagation();
       setKeyboardControl(false);
       return;
     }
-    const movement=movementByCode[e.code];
+    const movement=movementByCode[e.code]||movementByKey[e.key?.toLowerCase()];
     if(!movement)return;
     e.stopImmediatePropagation();
     if(!keyboardEnabled)return;
-    if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement)return;
+    if(e.ctrlKey||e.altKey||e.metaKey)return;
+    if(e.target instanceof HTMLTextAreaElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLInputElement&&e.target.type!=='range')return;
     e.preventDefault();
     moveDrone(movement[0],movement[1]);
+    $('#keyboardHint').textContent=`收到 ${e.code||e.key} · ${movement[0]} ${$('#drone'+movement[0]+'Value').textContent} m · Esc 退出`;
   },true);
 });
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x07131f);const camera=new THREE.PerspectiveCamera(42,1,.01,100);camera.position.set(1.6,-1.8,1.15);const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));$('#viewport').append(renderer.domElement);renderer.domElement.tabIndex=0;renderer.domElement.setAttribute('aria-label','无人机仿真视窗');const orbit=new OrbitControls(camera,renderer.domElement);orbit.target.set(0,0,.22);orbit.enableDamping=true;scene.add(new THREE.HemisphereLight(0xc6efff,0x122636,2.4));const light=new THREE.DirectionalLight(0xffffff,2.5);light.position.set(2,-3,4);scene.add(light);const grid=new THREE.GridHelper(4,24,0x23566c,0x133545);grid.position.z=-.08;scene.add(grid);

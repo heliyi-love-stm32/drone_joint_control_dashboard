@@ -9,11 +9,10 @@ const $=s=>document.querySelector(s),event=t=>$('#event').textContent=new Date()
 $('.hud small').id='keyboardHint';
 $('.position-actions').insertAdjacentHTML('beforeend','<button id="enableKeyboard" type="button">启用键盘控制</button>');
 $('.move-help').textContent='先点击三维视窗或启用按钮 · W/S → Y · A/D → Z · Q/E → X · Esc 退出';
-let keyboardEnabled=false;
+let keyboardEnabled=true,lastKeyDownAt=0;
 const movementByCode={KeyW:['Y',1],KeyS:['Y',-1],KeyA:['Z',1],KeyD:['Z',-1],KeyQ:['X',1],KeyE:['X',-1]};
 const movementByKey={w:movementByCode.KeyW,s:movementByCode.KeyS,a:movementByCode.KeyA,d:movementByCode.KeyD,q:movementByCode.KeyQ,e:movementByCode.KeyE};
 function setKeyboardControl(enabled){
-  if(enabled&&!droneAnchor){event('模型仍在加载，请稍后再启用键盘控制。');return;}
   keyboardEnabled=enabled;
   renderer.domElement.classList.toggle('keyboard-active',enabled);
   $('#enableKeyboard').classList.toggle('active',enabled);
@@ -23,47 +22,31 @@ function setKeyboardControl(enabled){
   event(enabled?'键盘控制已启用。':'键盘控制已退出。');
 }
 queueMicrotask(()=>{
-  renderer.domElement.addEventListener('pointerdown',()=>setKeyboardControl(true));
-  $('#enableKeyboard').addEventListener('click',()=>setKeyboardControl(!keyboardEnabled));
-  window.addEventListener('keydown',e=>{
+  $('#enableKeyboard').remove();
+  $('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
+  renderer.domElement.addEventListener('pointerdown',()=>renderer.domElement.focus({preventScroll:true}));
+  const handleMovementKey=e=>{
     if(e.code==='Escape'&&keyboardEnabled){
       e.preventDefault();
       e.stopImmediatePropagation();
-      setKeyboardControl(false);
+      $('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
       return;
     }
     const movement=movementByCode[e.code]||movementByKey[e.key?.toLowerCase()];
     if(!movement)return;
     e.stopImmediatePropagation();
-    if(!keyboardEnabled)return;
+    if(e.type==='keyup'&&performance.now()-lastKeyDownAt<120)return;
     if(e.ctrlKey||e.altKey||e.metaKey)return;
     if(e.target instanceof HTMLTextAreaElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLInputElement&&e.target.type!=='range')return;
     e.preventDefault();
     moveDrone(movement[0],movement[1]);
     $('#keyboardHint').textContent=`收到 ${e.code||e.key} · ${movement[0]} ${$('#drone'+movement[0]+'Value').textContent} m · Esc 退出`;
-  },true);
+    if(e.type==='keydown')lastKeyDownAt=performance.now();
+  };
+  document.addEventListener('keydown',handleMovementKey,true);
+  document.addEventListener('keyup',handleMovementKey,true);
   // Panel coordinates use Z for height; Three.js uses Y for height and Z for depth.
   const sceneAxisForRelativeAxis={X:'x',Y:'z',Z:'y'};
-  const relativePositionLine=new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),new THREE.Vector3()]),
-    new THREE.LineDashedMaterial({color:0xffd34d,dashSize:.14,gapSize:.08,transparent:true,opacity:.9})
-  );
-  relativePositionLine.computeLineDistances();
-  scene.add(relativePositionLine);
-  const frameRelativeScene=()=>{
-    if(!droneAnchor)return;
-    const relativeDistance=Math.max(4,droneAnchor.position.length());
-    const center=droneAnchor.position.clone().multiplyScalar(.5);
-    const distance=7+relativeDistance*1.2;
-    camera.position.copy(center).add(new THREE.Vector3(.72,-.86,.58).normalize().multiplyScalar(distance));
-    camera.near=Math.max(distance/100,.01);
-    camera.far=distance*20;
-    camera.updateProjectionMatrix();
-    orbit.target.copy(center);
-    orbit.update();
-  };
-  const frameWhenReady=()=>{if(droneAnchor)frameRelativeScene();else requestAnimationFrame(frameWhenReady)};
-  frameWhenReady();
   updateDronePosition=()=>{
     const nextPosition=new THREE.Vector3();
     ['X','Y','Z'].forEach(axis=>{
@@ -72,10 +55,10 @@ queueMicrotask(()=>{
       nextPosition[sceneAxisForRelativeAxis[axis]]=value;
     });
     if(!droneAnchor)return;
+    const cameraDelta=nextPosition.clone().sub(droneAnchor.position);
     droneAnchor.position.copy(nextPosition);
-    relativePositionLine.geometry.setFromPoints([new THREE.Vector3(),nextPosition]);
-    relativePositionLine.computeLineDistances();
-    frameRelativeScene();
+    camera.position.add(cameraDelta);
+    orbit.target.add(cameraDelta);
     event('无人机相对电线杆位置已更新。');
   };
   ['X','Y','Z'].forEach(axis=>$('#drone'+axis).oninput=updateDronePosition);

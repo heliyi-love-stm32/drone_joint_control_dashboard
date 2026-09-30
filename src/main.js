@@ -12,6 +12,7 @@ let lastKeyDownAt=0;
 const movementByCode={KeyW:['Y',1],KeyS:['Y',-1],KeyA:['Z',1],KeyD:['Z',-1],KeyQ:['X',1],KeyE:['X',-1]};
 const movementByKey={w:movementByCode.KeyW,s:movementByCode.KeyS,a:movementByCode.KeyA,d:movementByCode.KeyD,q:movementByCode.KeyQ,e:movementByCode.KeyE};
 const heldMovementKeys=new Map();
+const heldKeyTimes=new Map(),heldKeyTimers=new Map();
 queueMicrotask(()=>{
   $('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
   const handleMovementKey=e=>{
@@ -30,14 +31,34 @@ queueMicrotask(()=>{
     e.stopImmediatePropagation();
     const keyId=e.code||e.key;
     if(e.type==='keydown'){
+      const oldTimer=heldKeyTimers.get(keyId);
+      if(oldTimer)clearTimeout(oldTimer);
+      heldKeyTimers.delete(keyId);
       if(!heldMovementKeys.has(keyId))moveDrone(movement[0],movement[1]*.035);
       heldMovementKeys.set(keyId,movement);
+      heldKeyTimes.set(keyId,performance.now());
       lastKeyDownAt=performance.now();
       $('#keyboardHint').textContent=`持续移动中 · ${e.code||e.key} · 松开停止`;
     }else{
       const wasHeld=heldMovementKeys.delete(keyId);
-      // Some embedded browsers forward only keyup. Preserve a small one-shot move.
-      if(!wasHeld&&performance.now()-lastKeyDownAt>=120)moveDrone(movement[0],movement[1]*.05);
+      const heldFor=performance.now()-(heldKeyTimes.get(keyId)||0);
+      heldKeyTimes.delete(keyId);
+      if(wasHeld&&heldFor<40){
+        // Some embedded browsers emit keyup immediately after keydown. Keep a
+        // short, slow motion window so a real physical hold remains visible.
+        heldMovementKeys.set(keyId,movement);
+        heldKeyTimers.set(keyId,setTimeout(()=>{
+          heldMovementKeys.delete(keyId);
+          heldKeyTimers.delete(keyId);
+        },1200));
+      }else if(!wasHeld&&performance.now()-lastKeyDownAt>=120){
+        // Fallback for browsers that only forward keyup events.
+        heldMovementKeys.set(keyId,movement);
+        heldKeyTimers.set(keyId,setTimeout(()=>{
+          heldMovementKeys.delete(keyId);
+          heldKeyTimers.delete(keyId);
+        },700));
+      }
       if(!heldMovementKeys.size)$('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
     }
   };

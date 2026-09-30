@@ -11,6 +11,7 @@ $('.move-help').textContent='键盘控制已启用 · W/S → Y · A/D → Z · 
 let lastKeyDownAt=0;
 const movementByCode={KeyW:['Y',1],KeyS:['Y',-1],KeyA:['Z',1],KeyD:['Z',-1],KeyQ:['X',1],KeyE:['X',-1]};
 const movementByKey={w:movementByCode.KeyW,s:movementByCode.KeyS,a:movementByCode.KeyA,d:movementByCode.KeyD,q:movementByCode.KeyQ,e:movementByCode.KeyE};
+const heldMovementKeys=new Map();
 queueMicrotask(()=>{
   $('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
   const handleMovementKey=e=>{
@@ -22,10 +23,18 @@ queueMicrotask(()=>{
     e.__droneKeyboardHandled=true;
     e.preventDefault();
     e.stopImmediatePropagation();
-    if(e.type==='keyup'&&performance.now()-lastKeyDownAt<120)return;
-    moveDrone(movement[0],movement[1]);
-    $('#keyboardHint').textContent=`收到 ${e.code||e.key} · ${movement[0]} ${$('#drone'+movement[0]+'Value').textContent} m`;
-    if(e.type==='keydown')lastKeyDownAt=performance.now();
+    const keyId=e.code||e.key;
+    if(e.type==='keydown'){
+      if(!heldMovementKeys.has(keyId))moveDrone(movement[0],movement[1]*.035);
+      heldMovementKeys.set(keyId,movement);
+      lastKeyDownAt=performance.now();
+      $('#keyboardHint').textContent=`持续移动中 · ${e.code||e.key} · 松开停止`;
+    }else{
+      const wasHeld=heldMovementKeys.delete(keyId);
+      // Some embedded browsers forward only keyup. Preserve a small one-shot move.
+      if(!wasHeld&&performance.now()-lastKeyDownAt>=120)moveDrone(movement[0],movement[1]*.05);
+      if(!heldMovementKeys.size)$('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
+    }
   };
   // The in-app browser may forward keys to window, document, or canvas.
   // All three use one deduplicated handler, so a key moves exactly once.
@@ -37,6 +46,7 @@ queueMicrotask(()=>{
   const focusKeyboard=()=>{window.focus();renderer.domElement.focus({preventScroll:true});};
   focusKeyboard();
   setTimeout(focusKeyboard,250);
+  window.addEventListener('blur',()=>heldMovementKeys.clear());
   // Panel coordinates use Z for height; Three.js uses Y for height and Z for depth.
   const sceneAxisForRelativeAxis={X:'x',Y:'z',Z:'y'};
   updateDronePosition=()=>{
@@ -53,7 +63,20 @@ queueMicrotask(()=>{
     orbit.target.add(cameraDelta);
     event('无人机相对电线杆位置已更新。');
   };
-  ['X','Y','Z'].forEach(axis=>$('#drone'+axis).oninput=updateDronePosition);
+  ['X','Y','Z'].forEach(axis=>{
+    $('#drone'+axis).oninput=updateDronePosition;
+    $('#drone'+axis).step='any';
+  });
+  let previousMotionTime=performance.now();
+  const moveHeldKeys=now=>{
+    const elapsed=Math.min(.05,(now-previousMotionTime)/1000);
+    previousMotionTime=now;
+    if(droneAnchor&&heldMovementKeys.size){
+      for(const [axis,direction] of heldMovementKeys.values())moveDrone(axis,direction*.28*elapsed);
+    }
+    requestAnimationFrame(moveHeldKeys);
+  };
+  requestAnimationFrame(moveHeldKeys);
   const setReferenceCamera=()=>{
     if(!droneAnchor){requestAnimationFrame(setReferenceCamera);return;}
     // Match the requested pole-centred, elevated near view.

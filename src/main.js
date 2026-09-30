@@ -46,6 +46,10 @@ queueMicrotask(()=>{
   [window,document,renderer.domElement].forEach(target=>{
     target.addEventListener('keydown',handleMovementKey,true);
     target.addEventListener('keyup',handleMovementKey,true);
+    // Embedded-browser key forwarding can bypass capture phase. Register the
+    // same deduplicated handler in the normal bubbling phase as a fallback.
+    target.addEventListener('keydown',handleMovementKey);
+    target.addEventListener('keyup',handleMovementKey);
   });
   document.body.tabIndex=-1;
   const focusKeyboard=()=>{window.focus();renderer.domElement.focus({preventScroll:true});};

@@ -54,6 +54,15 @@ queueMicrotask(()=>{
     event('无人机相对电线杆位置已更新。');
   };
   ['X','Y','Z'].forEach(axis=>$('#drone'+axis).oninput=updateDronePosition);
+  const setReferenceCamera=()=>{
+    if(!droneAnchor){requestAnimationFrame(setReferenceCamera);return;}
+    // Match the requested pole-centred, elevated near view.
+    camera.position.set(4.2,5.6,4.9);
+    orbit.target.set(0,1.6,0);
+    camera.updateProjectionMatrix();
+    orbit.update();
+  };
+  setReferenceCamera();
 });
 const scene=new THREE.Scene();scene.background=new THREE.Color(0x07131f);const camera=new THREE.PerspectiveCamera(42,1,.01,100);camera.position.set(1.6,-1.8,1.15);const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,2));$('#viewport').append(renderer.domElement);renderer.domElement.tabIndex=0;renderer.domElement.setAttribute('aria-label','无人机仿真视窗');const orbit=new OrbitControls(camera,renderer.domElement);orbit.target.set(0,0,.22);orbit.enableDamping=true;scene.add(new THREE.HemisphereLight(0xc6efff,0x122636,2.4));const light=new THREE.DirectionalLight(0xffffff,2.5);light.position.set(2,-3,4);scene.add(light);const grid=new THREE.GridHelper(4,24,0x23566c,0x133545);grid.position.z=-.08;scene.add(grid);
 let robot,droneAnchor,pole,joints=[],selected=0,filter='all',rotor=false,running=false,pct=0,recording=false,recordTimer=null,rotorSpeed=60;const values={},tracks=[],frames=[];const loader=new URDFLoader(),base=`${import.meta.env.BASE_URL}robot/`;loader.packages={'天枢无人机完整版(更换悬垂式绝缘子串)':base};loader.load(base+'drone.urdf',r=>{robot=r;robot.rotation.x=-Math.PI/2;robot.traverse(o=>{if(o.isMesh)o.material=new THREE.MeshStandardMaterial({color:o.name.includes('left')||o.name.includes('right')?0xffa11c:0x42b8e8,metalness:.55,roughness:.3})});droneAnchor=new THREE.Group();scene.add(droneAnchor);droneAnchor.add(robot);scene.updateMatrixWorld(true);pole=robot.links?.dianxiangan;if(pole){scene.attach(pole);pole.traverse(o=>{if(o.isMesh)o.material=new THREE.MeshStandardMaterial({color:0x8997a0,metalness:.7,roughness:.42})})}joints=Object.values(robot.joints).filter(j=>j.jointType!=='fixed');joints.forEach(j=>values[j.name]=0);$('#status').textContent=`已加载 ${joints.length} 个可动关节 · 仿真控制就绪`;renderJoints();resize();event('无人机模型已加载。')},undefined,()=>$('#status').textContent='模型加载失败，请通过本地服务器打开网站。');

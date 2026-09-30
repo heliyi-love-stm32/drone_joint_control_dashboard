@@ -71,16 +71,13 @@ queueMicrotask(()=>{
     $('#drone'+axis).oninput=updateDronePosition;
     $('#drone'+axis).step='any';
   });
-  let previousMotionTime=performance.now();
-  const moveHeldKeys=now=>{
-    const elapsed=Math.min(.05,(now-previousMotionTime)/1000);
-    previousMotionTime=now;
+  // Keep held-key motion independent from the WebGL render loop. Some embedded
+  // browsers throttle animation frames while still forwarding one key press.
+  setInterval(()=>{
     if(droneAnchor&&heldMovementKeys.size){
-      for(const [axis,direction] of heldMovementKeys.values())moveDrone(axis,direction*.28*elapsed);
+      for(const [axis,direction] of heldMovementKeys.values())moveDrone(axis,direction*.28/30);
     }
-    requestAnimationFrame(moveHeldKeys);
-  };
-  requestAnimationFrame(moveHeldKeys);
+  },1000/30);
   const setReferenceCamera=()=>{
     if(!droneAnchor){requestAnimationFrame(setReferenceCamera);return;}
     // Match the requested pole-centred, elevated near view.

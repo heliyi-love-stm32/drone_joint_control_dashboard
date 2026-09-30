@@ -14,6 +14,7 @@ const movementByCode={KeyW:['Y',1],KeyS:['Y',-1],KeyA:['Z',1],KeyD:['Z',-1],KeyQ
 const movementByKey={w:movementByCode.KeyW,s:movementByCode.KeyS,a:movementByCode.KeyA,d:movementByCode.KeyD,q:movementByCode.KeyQ,e:movementByCode.KeyE};
 const heldMovementKeys=new Map();
 const heldKeyTimes=new Map(),heldKeyTimers=new Map();
+let heldMotionSteps=0;
 queueMicrotask(()=>{
   $('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
   const handleMovementKey=e=>{
@@ -38,6 +39,7 @@ queueMicrotask(()=>{
       if(!heldMovementKeys.has(keyId))moveDrone(movement[0],movement[1]*.035);
       heldMovementKeys.set(keyId,movement);
       heldKeyTimes.set(keyId,performance.now());
+      heldMotionSteps=0;
       lastKeyDownAt=performance.now();
       $('#keyboardHint').textContent=`持续移动中 · ${e.code||e.key} · 松开停止`;
       $('#keyboardDebug').textContent=`诊断：收到 keydown ${keyId} · 持续状态已建立`;
@@ -62,7 +64,7 @@ queueMicrotask(()=>{
         },700));
       }
       if(!heldMovementKeys.size)$('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
-      $('#keyboardDebug').textContent=`诊断：收到 keyup ${keyId} · 按下时长 ${heldFor.toFixed(0)} ms`;
+      $('#keyboardDebug').textContent=`诊断：收到 keyup ${keyId} · 按下 ${heldFor.toFixed(0)} ms · 连续步数 ${heldMotionSteps} · Y ${$('#droneYValue').textContent} m`;
     }
   };
   // The in-app browser may forward keys to window, document, or canvas.
@@ -104,6 +106,8 @@ queueMicrotask(()=>{
   setInterval(()=>{
     if(droneAnchor&&heldMovementKeys.size){
       for(const [axis,direction] of heldMovementKeys.values())moveDrone(axis,direction*.28/30);
+      heldMotionSteps++;
+      if(heldMotionSteps%15===0)$('#keyboardDebug').textContent=`诊断：连续移动中 · 步数 ${heldMotionSteps} · Y ${$('#droneYValue').textContent} m`;
     }
   },1000/30);
   const setReferenceCamera=()=>{

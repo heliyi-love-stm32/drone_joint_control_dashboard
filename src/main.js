@@ -15,6 +15,11 @@ const heldMovementKeys=new Map();
 queueMicrotask(()=>{
   $('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
   const handleMovementKey=e=>{
+    if(e.code==='Escape'){
+      heldMovementKeys.clear();
+      $('#keyboardHint').textContent='键盘控制已启用 · W/S 纵向 · A/D 高度 · Q/E 横向';
+      return;
+    }
     if(e.__droneKeyboardHandled)return;
     const movement=movementByCode[e.code]||movementByKey[e.key?.toLowerCase()];
     if(!movement)return;
@@ -46,7 +51,6 @@ queueMicrotask(()=>{
   const focusKeyboard=()=>{window.focus();renderer.domElement.focus({preventScroll:true});};
   focusKeyboard();
   setTimeout(focusKeyboard,250);
-  window.addEventListener('blur',()=>heldMovementKeys.clear());
   // Panel coordinates use Z for height; Three.js uses Y for height and Z for depth.
   const sceneAxisForRelativeAxis={X:'x',Y:'z',Z:'y'};
   updateDronePosition=()=>{
